@@ -380,7 +380,7 @@ app.post('/validate-token', async (req, res) => {
       
       // Para desenvolvimento, mapeia para um usuário padrão
       // Você pode alterar este ID para qualquer usuário que existe no seu banco
-      const defaultUserId = "68d45095e7797492cd2c8b75"; // <<<< ALTERE ESTE NÚMERO
+      const defaultUserId = "68d5251ffe2b086b370cd59e"; // <<<< ALTERE ESTE NÚMERO
       
       console.log("👤 Tentando usar userId padrão:", defaultUserId);
       
