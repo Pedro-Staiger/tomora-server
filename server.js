@@ -51,8 +51,8 @@ app.post('/usersSearch', async (req, res) => {
       linkedId: user.linkedId
     });
   } catch (error) {
-    console.error("Erro ao fazer login: " + error);
-    res.status(500).json({ error: 'Failed to login' });
+    console.error("Erro ao consultar usuário: " + error);
+    res.status(500).json({ error: 'Failed to search' });
   }
 });
 
