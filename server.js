@@ -200,6 +200,53 @@ app.post('/remindersDelete', async (req, res) => {
   }
 });
 
+//Deleta o lembrete mais próximo ao horário atual
+app.post('/reminderNearestDelete', async (req, res) => {
+  try {
+    //Extração e validação dos dados de entrada
+    const userId = req.body.userId;
+    const hour = req.body.hour;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+    if (!hour || !/^\d{2}:\d{2}$/.test(hour)) {
+      return res.status(400).json({ error: 'hour deve estar no formato HH:mm' });
+    }
+
+    //Busca todos os lembretes do usuário
+    const reminders = await prisma.reminder.findMany({
+      where: {
+        userId: userId,
+      },
+      orderBy: {
+        hour: 'asc',
+      },
+    });
+
+    //Verifica se há lembretes
+    if (!reminders || reminders.length === 0) {
+      return res.status(404).json({ error: 'Nenhum lembrete cadastrado' });
+    }
+
+    //Encontra o primeiro lembrete futuro (hour >= req.body.hour)
+    const futureReminder = reminders.find(reminder => reminder.hour >= hour);
+
+    //Se houver lembrete futuro, retorna o primeiro; caso contrário, retorna o primeiro disponível
+    const nearestReminder = futureReminder || reminders[0];
+
+    await prisma.reminder.delete({
+      where: {
+        id: nearestReminder.id
+      }
+    });
+    
+    res.status(200).json(nearestReminder);
+  } catch (error) {
+    console.error('Erro ao consultar lembrete mais próximo:', error);
+    res.status(500).json({ error: 'Falha ao consultar próximo lembrete!' });
+  }
+});
+
 //==HISTÓRICO==\\
 //Cria histórico
 app.post('/historyCreate', async (req, res) => {
