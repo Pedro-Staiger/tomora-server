@@ -322,11 +322,50 @@ app.post('/token', async (req, res) => {
 // Endpoint para validar access_token (usado pela skill)
 app.post('/validate-token', async (req, res) => {
   const { token } = req.body;
+  
+  console.log("🔍 === INICIANDO /validate-token ===");
+  console.log("📝 Token recebido:", token ? token.substring(0, 50) + "..." : "NULL");
 
   try {
-    // Decodifica o token (para testes, usamos base64 simples)
+    // Verifica se é um JWT da Alexa (começa com 'eyJ')
+    if (token && token.startsWith('eyJ')) {
+      console.log("🔐 Token JWT da Alexa detectado");
+      
+      // Para desenvolvimento, mapeia para um usuário padrão
+      // Você pode alterar este ID para qualquer usuário que existe no seu banco
+      const defaultUserId = "68d45095e7797492cd2c8b75"; // <<<< ALTERE ESTE NÚMERO
+      
+      console.log("👤 Tentando usar userId padrão:", defaultUserId);
+      
+      // Verifica se o usuário padrão existe
+      const user = await prisma.user.findUnique({
+        where: { id: defaultUserId }
+      });
+
+      if (user) {
+        console.log("✅ Usuário padrão encontrado:", user.name);
+        return res.status(200).json({ userId: defaultUserId });
+      }
+      
+      // Se não existe o userId padrão, pega o primeiro usuário disponível
+      console.log("⚠️ Usuário padrão não encontrado, buscando primeiro disponível...");
+      const firstUser = await prisma.user.findFirst();
+      
+      if (!firstUser) {
+        console.log("❌ Nenhum usuário encontrado no sistema");
+        return res.status(401).json({ error: 'Nenhum usuário encontrado no sistema' });
+      }
+      
+      console.log("✅ Usando primeiro usuário disponível:", firstUser.name, "ID:", firstUser.id);
+      return res.status(200).json({ userId: firstUser.id });
+    }
+    
+    // Se não é JWT, tenta decodificar como base64 simples (seu formato original)
+    console.log("📝 Tentando decodificar como base64 simples");
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
     const userId = decoded.userId;
+
+    console.log("🆔 UserId extraído do token base64:", userId);
 
     // Verifica se o usuário existe
     const user = await prisma.user.findUnique({
@@ -334,13 +373,20 @@ app.post('/validate-token', async (req, res) => {
     });
 
     if (!user) {
+      console.log("❌ Usuário não encontrado para ID:", userId);
       return res.status(401).json({ error: 'Usuário não encontrado' });
     }
 
-    res.status(200).json({ userId });
+    console.log("✅ Usuário encontrado:", user.name);
+    return res.status(200).json({ userId });
+
   } catch (error) {
-    console.error('Erro ao validar token:', error);
-    res.status(400).json({ error: 'Token inválido' });
+    console.log("🚫 ERRO no /validate-token:");
+    console.log("🚫 Erro message:", error.message);
+    console.log("🚫 Erro stack:", error.stack);
+    res.status(400).json({ error: 'Token inválido', details: error.message });
+  } finally {
+    console.log("🔍 === FIM /validate-token ===");
   }
 });
 
