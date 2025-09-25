@@ -464,6 +464,397 @@ app.post('/validate-token', async (req, res) => {
   }
 });
 
+// Sincroniza lembretes da Alexa com o banco de dados
+app.post('/sync-alexa-reminders', async (req, res) => {
+  try {
+    console.log("🔄 === INICIANDO SINCRONIZAÇÃO DE LEMBRETES DA ALEXA ===");
+    
+    const { userId, lembretes } = req.body;
+    
+    // Validação de entrada
+    if (!userId) {
+      console.log("❌ UserId não fornecido");
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+    
+    if (!Array.isArray(lembretes)) {
+      console.log("❌ Lembretes deve ser um array");
+      return res.status(400).json({ error: 'lembretes deve ser um array' });
+    }
+    
+    console.log(`📋 Sincronizando ${lembretes.length} lembretes para userId: ${userId}`);
+    
+    // Verifica se o usuário existe
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      console.log("❌ Usuário não encontrado:", userId);
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    
+    console.log(`✅ Usuário encontrado: ${user.name}`);
+    
+    let sincronizados = 0;
+    let erros = 0;
+    
+    // Processa cada lembrete da Alexa
+    for (const lembrete of lembretes) {
+      try {
+        console.log(`🔄 Processando lembrete:`, {
+          id: lembrete.id,
+          status: lembrete.status,
+          mensagem: lembrete.mensagem?.substring(0, 50) + "..."
+        });
+        
+        // Extrai informações do lembrete
+        const mensagem = lembrete.mensagem || '';
+        const scheduledTime = lembrete.hora || '';
+        
+        // Tenta extrair nome do remédio da mensagem
+        // Ex: "Você precisa tomar Dipirona, 500mg."
+        const medicineMatch = mensagem.match(/tomar\s+([^,\.]+)/i);
+        const nomeRemedio = medicineMatch ? medicineMatch[1].trim() : 'Remédio não identificado';
+        
+        // Tenta extrair dosagem
+        const dosageMatch = mensagem.match(/,\s*([^\.]+)/);
+        const dosagem = dosageMatch ? dosageMatch[1].trim() : null;
+        
+        // Extrai hora do scheduledTime (formato: "2024-12-25T14:30:00")
+        let hora = null;
+        if (scheduledTime) {
+          const timeFromSchedule = scheduledTime.split('T')[1]?.substring(0, 5); // "14:30"
+          hora = timeFromSchedule;
+        }
+        
+        console.log(`📝 Dados extraídos:`, {
+          remedio: nomeRemedio,
+          dosagem: dosagem,
+          hora: hora
+        });
+        
+        // Verifica se já existe um lembrete similar no banco
+        const existingReminder = await prisma.reminder.findFirst({
+          where: {
+            userId: userId,
+            name: nomeRemedio,
+            hour: hora
+          }
+        });
+        
+        if (existingReminder) {
+          console.log(`⏭️ Lembrete já existe no banco - pulando:`, nomeRemedio);
+          continue;
+        }
+        
+        // Cria novo lembrete no banco apenas se não existir
+        if (nomeRemedio !== 'Remédio não identificado' && hora) {
+          const novoLembrete = await prisma.reminder.create({
+            data: {
+              userId: userId,
+              name: nomeRemedio,
+              dosage: dosagem,
+              desc: `Sincronizado da Alexa - ID: ${lembrete.id}`,
+              hour: hora
+            }
+          });
+          
+          console.log(`✅ Lembrete criado no banco:`, {
+            id: novoLembrete.id,
+            name: novoLembrete.name,
+            hour: novoLembrete.hour
+          });
+          
+          sincronizados++;
+        } else {
+          console.log(`⚠️ Dados insuficientes para criar lembrete:`, {
+            remedio: nomeRemedio,
+            hora: hora
+          });
+        }
+        
+      } catch (lembreteError) {
+        console.log(`❌ Erro ao processar lembrete individual:`, lembreteError.message);
+        erros++;
+      }
+    }
+    
+    const resultado = {
+      message: 'Sincronização concluída',
+      processados: lembretes.length,
+      sincronizados: sincronizados,
+      erros: erros,
+      userId: userId
+    };
+    
+    console.log(`🏁 Resultado da sincronização:`, resultado);
+    console.log("🔄 === FIM SINCRONIZAÇÃO DE LEMBRETES DA ALEXA ===");
+    
+    res.status(200).json(resultado);
+    
+  } catch (error) {
+    console.error('❌ ERRO na sincronização de lembretes da Alexa:', error);
+    res.status(500).json({ 
+      error: 'Falha na sincronização de lembretes',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para sincronização de histórico (criar registros baseados em atividade)
+app.post('/sync-history', async (req, res) => {
+  try {
+    console.log("📚 === INICIANDO SINCRONIZAÇÃO DE HISTÓRICO ===");
+    
+    const { userId, atividades } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+    
+    // Verifica se o usuário existe
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      console.log("❌ Usuário não encontrado:", userId);
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    
+    console.log(`✅ Sincronizando histórico para: ${user.name}`);
+    
+    // Se não há atividades específicas, pode criar um registro de sincronização
+    if (!atividades || atividades.length === 0) {
+      console.log("📝 Criando registro de sincronização automática");
+      
+      await prisma.history.create({
+        data: {
+          userId: userId,
+          reminderId: null,
+          name: "Sincronização Alexa",
+          hour: new Date().toTimeString().substring(0, 5), // HH:MM atual
+          taken: false
+        }
+      });
+      
+      console.log("✅ Registro de sincronização criado");
+    } else {
+      // Processa atividades específicas se fornecidas
+      for (const atividade of atividades) {
+        await prisma.history.create({
+          data: {
+            userId: userId,
+            reminderId: atividade.reminderId || null,
+            name: atividade.name || "Atividade não identificada",
+            hour: atividade.hour || new Date().toTimeString().substring(0, 5),
+            taken: atividade.taken || false
+          }
+        });
+      }
+      
+      console.log(`✅ ${atividades.length} atividades registradas no histórico`);
+    }
+    
+    console.log("📚 === FIM SINCRONIZAÇÃO DE HISTÓRICO ===");
+    
+    res.status(200).json({ 
+      message: 'Histórico sincronizado com sucesso',
+      userId: userId 
+    });
+    
+  } catch (error) {
+    console.error('❌ ERRO na sincronização de histórico:', error);
+    res.status(500).json({ 
+      error: 'Falha na sincronização de histórico',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para sincronização completa (lembretes + histórico + verificações)
+app.post('/sync-complete', async (req, res) => {
+  try {
+    console.log("🔄 === INICIANDO SINCRONIZAÇÃO COMPLETA ===");
+    
+    const { userId, lembretes, atividades } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+    
+    // Verifica se o usuário existe
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    
+    console.log(`🔄 Sincronização completa para: ${user.name}`);
+    
+    const resultado = {
+      userId: userId,
+      userName: user.name,
+      lembretesSincronizados: 0,
+      atividadesRegistradas: 0,
+      erros: [],
+      timestamp: new Date().toISOString()
+    };
+    
+    // Sincroniza lembretes se fornecidos
+    if (lembretes && Array.isArray(lembretes) && lembretes.length > 0) {
+      try {
+        // Reutiliza a lógica do endpoint de lembretes
+        for (const lembrete of lembretes) {
+          // Processa cada lembrete (lógica similar ao endpoint anterior)
+          const mensagem = lembrete.mensagem || '';
+          const medicineMatch = mensagem.match(/tomar\s+([^,\.]+)/i);
+          const nomeRemedio = medicineMatch ? medicineMatch[1].trim() : null;
+          
+          if (nomeRemedio) {
+            const scheduledTime = lembrete.hora || '';
+            const hora = scheduledTime.split('T')[1]?.substring(0, 5);
+            
+            if (hora) {
+              // Verifica se já existe
+              const existing = await prisma.reminder.findFirst({
+                where: { userId, name: nomeRemedio, hour: hora }
+              });
+              
+              if (!existing) {
+                await prisma.reminder.create({
+                  data: {
+                    userId,
+                    name: nomeRemedio,
+                    dosage: null,
+                    desc: `Sync completa - ${new Date().toLocaleDateString()}`,
+                    hour: hora
+                  }
+                });
+                resultado.lembretesSincronizados++;
+              }
+            }
+          }
+        }
+      } catch (lembretesError) {
+        resultado.erros.push(`Erro nos lembretes: ${lembretesError.message}`);
+      }
+    }
+    
+    // Registra atividades se fornecidas
+    if (atividades && Array.isArray(atividades) && atividades.length > 0) {
+      try {
+        for (const atividade of atividades) {
+          await prisma.history.create({
+            data: {
+              userId,
+              reminderId: atividade.reminderId || null,
+              name: atividade.name || "Atividade sincronizada",
+              hour: atividade.hour || new Date().toTimeString().substring(0, 5),
+              taken: atividade.taken || false
+            }
+          });
+          resultado.atividadesRegistradas++;
+        }
+      } catch (atividadesError) {
+        resultado.erros.push(`Erro nas atividades: ${atividadesError.message}`);
+      }
+    }
+    
+    // Cria um registro de sincronização no histórico
+    await prisma.history.create({
+      data: {
+        userId,
+        reminderId: null,
+        name: "Sincronização Completa Alexa",
+        hour: new Date().toTimeString().substring(0, 5),
+        taken: false
+      }
+    });
+    
+    console.log("🏁 Resultado da sincronização completa:", resultado);
+    console.log("🔄 === FIM SINCRONIZAÇÃO COMPLETA ===");
+    
+    res.status(200).json(resultado);
+    
+  } catch (error) {
+    console.error('❌ ERRO na sincronização completa:', error);
+    res.status(500).json({ 
+      error: 'Falha na sincronização completa',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para verificar status de sincronização
+app.post('/sync-status', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+    
+    // Busca estatísticas do usuário
+    const [user, reminders, history] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId } }),
+      prisma.reminder.findMany({ 
+        where: { userId },
+        orderBy: { id: 'desc' }
+      }),
+      prisma.history.findMany({ 
+        where: { userId },
+        orderBy: { id: 'desc' },
+        take: 10 // Últimos 10 registros
+      })
+    ]);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    
+    const ultimaSincronizacao = history.find(h => 
+      h.name.includes('Sincronização') || h.name.includes('Alexa')
+    );
+    
+    res.status(200).json({
+      userId: userId,
+      userName: user.name,
+      totalReminders: reminders.length,
+      totalHistoryEntries: history.length,
+      ultimaSincronizacao: ultimaSincronizacao?.createdAt || null,
+      remindersRecentes: reminders.slice(0, 5).map(r => ({
+        name: r.name,
+        hour: r.hour,
+        dosage: r.dosage
+      })),
+      atividadesRecentes: history.slice(0, 5).map(h => ({
+        name: h.name,
+        hour: h.hour,
+        taken: h.taken
+      }))
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao verificar status:', error);
+    res.status(500).json({ 
+      error: 'Falha ao verificar status',
+      details: error.message 
+    });
+  }
+});
+
+// Inicialização
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
+
+
 // Inicialização
 const PORT = process.env.PORT || 3000;
 
