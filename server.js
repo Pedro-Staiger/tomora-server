@@ -29,6 +29,33 @@ app.post('/usersCreate', async (req, res) => {
   }
 });
 
+//Busca informações de um usuário específico
+app.post('/usersSearch', async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst({
+      where: {
+        id: req.body.id
+      }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+
+    res.status(200).json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      isMedicado: user.isMedicado,
+      isAuxiliar: user.isAuxiliar,
+      linkedId: user.linkedId
+    });
+  } catch (error) {
+    console.error("Erro ao fazer login: " + error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
 //Efetua o login
 app.post('/usersLogin', async (req, res) => {
   try {
