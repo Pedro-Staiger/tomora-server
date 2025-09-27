@@ -307,7 +307,7 @@ app.post('/historySearch', async (req, res) => {
   try {
     const histories = await prisma.history.findMany({
       where: {
-        userId: req.body.userId
+        userId: req.body.searchId
       },
       orderBy: {
         id: 'desc'
