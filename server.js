@@ -321,6 +321,35 @@ app.post('/historySearch', async (req, res) => {
   }
 });
 
+// Consulta histórico por userId e reminderId
+app.get('/historyByReminder', async (req, res) => {
+  try {
+    const { userId, reminderId } = req.query;
+
+    // Validação básica dos parâmetros
+    if (!userId || !reminderId) {
+      return res.status(400).json({ error: 'userId e reminderId são obrigatórios' });
+    }
+
+    // Consulta no banco (usando Prisma)
+    const histories = await prisma.history.findMany({
+      where: {
+        userId: userId,
+        reminderId: reminderId,
+      },
+      orderBy: {
+        id: 'desc', // Ordena por ID descendente para pegar o mais recente primeiro
+      },
+    });
+
+    // Retorna os registros encontrados
+    res.status(200).json(histories);
+  } catch (error) {
+    console.error('Erro ao consultar histórico por reminder:', error);
+    res.status(500).json({ error: 'Falha ao consultar histórico' });
+  }
+});
+
 //==ACCOUNT LINKING PARA ALEXA==\\
 // Configurações para testes
 const CLIENT_ID = 'tomora-skill-test-1234567890';
