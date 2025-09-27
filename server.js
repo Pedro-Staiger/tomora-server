@@ -3,14 +3,14 @@ import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import path from 'path';
-import { fileURLToPath } from 'url';  // ✅ ADICIONAR
-import { dirname } from 'path';       // ✅ ADICIONAR
+import { fileURLToPath } from 'url';  // ✅ JÁ PRESENTE
+import { dirname } from 'path';       // ✅ JÁ PRESENTE
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// ✅ ADICIONAR ESTAS LINHAS:
+// ✅ JÁ PRESENTE:
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -328,13 +328,13 @@ const CLIENT_SECRET = 'x9kPqW7mZ3tR8vY2nJ5bL6cF4hT1rQ8w';
 // Simula armazenamento temporário de códigos de autorização (em produção, use Redis ou DB com expiração)
 const authCodes = new Map(); // Map para armazenar { code: { userId, expires } }
 
-// Adicione ANTES do endpoint /auth:
+// ✅ ADICIONAR ESTE ENDPOINT ANTES DO /auth:
 app.get('/login', (req, res) => {
   // Retorna a página HTML
-  res.sendFile(__dirname + '/login.html');
+  res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// Endpoint de autorização (OAuth 2.0)
+// ✅ ENDPOINT /auth CORRIGIDO:
 app.get('/auth', async (req, res) => {
   const { response_type, client_id, state, redirect_uri, email, password } = req.query;
 
@@ -343,7 +343,7 @@ app.get('/auth', async (req, res) => {
     return res.status(400).json({ error: 'Parâmetros OAuth inválidos' });
   }
 
-  // Se não tem email/senha, redireciona para página de login
+  // ✅ Se não tem email/senha, redireciona para página de login
   if (!email || !password) {
     const loginUrl = `/login?${new URLSearchParams({
       response_type,
@@ -420,12 +420,12 @@ app.post('/validate-token', async (req, res) => {
   const { token } = req.body;
   
   console.log("🔍 === INICIANDO /validate-token ===");
-  console.log("📝 Token recebido:", token ? token.substring(0, 50) + "..." : "NULL");
+  console.log("🔍 Token recebido:", token ? token.substring(0, 50) + "..." : "NULL");
 
   try {
     // Verifica se é um JWT da Alexa (começa com 'eyJ')
     if (token && token.startsWith('eyJ')) {
-      console.log("🔐 Token JWT da Alexa detectado");
+      console.log("🔍 Token JWT da Alexa detectado");
       
       // Para desenvolvimento, mapeia para um usuário padrão
       // Você pode alterar este ID para qualquer usuário que existe no seu banco
@@ -457,7 +457,7 @@ app.post('/validate-token', async (req, res) => {
     }
     
     // Se não é JWT, tenta decodificar como base64 simples (seu formato original)
-    console.log("📝 Tentando decodificar como base64 simples");
+    console.log("🔍 Tentando decodificar como base64 simples");
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
     const userId = decoded.userId;
 
@@ -551,7 +551,7 @@ app.post('/sync-alexa-reminders', async (req, res) => {
           hora = timeFromSchedule;
         }
         
-        console.log(`📝 Dados extraídos:`, {
+        console.log(`🔍 Dados extraídos:`, {
           remedio: nomeRemedio,
           dosagem: dosagem,
           hora: hora
@@ -567,7 +567,7 @@ app.post('/sync-alexa-reminders', async (req, res) => {
         });
         
         if (existingReminder) {
-          console.log(`⏭️ Lembrete já existe no banco - pulando:`, nomeRemedio);
+          console.log(`⭐️ Lembrete já existe no banco - pulando:`, nomeRemedio);
           continue;
         }
         
@@ -611,7 +611,7 @@ app.post('/sync-alexa-reminders', async (req, res) => {
       userId: userId
     };
     
-    console.log(`🏁 Resultado da sincronização:`, resultado);
+    console.log(`📊 Resultado da sincronização:`, resultado);
     console.log("🔄 === FIM SINCRONIZAÇÃO DE LEMBRETES DA ALEXA ===");
     
     res.status(200).json(resultado);
@@ -798,7 +798,7 @@ app.post('/sync-complete', async (req, res) => {
       }
     });
     
-    console.log("🏁 Resultado da sincronização completa:", resultado);
+    console.log("📊 Resultado da sincronização completa:", resultado);
     console.log("🔄 === FIM SINCRONIZAÇÃO COMPLETA ===");
     
     res.status(200).json(resultado);
