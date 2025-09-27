@@ -325,8 +325,8 @@ app.post('/historySearch', async (req, res) => {
 const CLIENT_ID = 'tomora-skill-test-1234567890';
 const CLIENT_SECRET = 'x9kPqW7mZ3tR8vY2nJ5bL6cF4hT1rQ8w';
 
-// Simula armazenamento temporário de códigos de autorização (em produção, use Redis ou DB com expiração)
-const authCodes = new Map(); // Map para armazenar { code: { userId, expires } }
+// Simula armazenamento temporário de códigos de autorização
+const authCodes = new Map();
 
 // ✅ ADICIONAR ESTE ENDPOINT ANTES DO /auth:
 app.get('/login', (req, res) => {
@@ -334,25 +334,33 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// ✅ ENDPOINT /auth CORRIGIDO:
+// ✅ ENDPOINT /auth COM LOGS:
 app.get('/auth', async (req, res) => {
+  console.log('=== DEBUG AUTH ===');
+  console.log('Query recebida:', JSON.stringify(req.query, null, 2));
+  
   const { response_type, client_id, state, redirect_uri, email, password } = req.query;
 
   // Valida parâmetros OAuth
   if (response_type !== 'code' || client_id !== CLIENT_ID) {
+    console.log('❌ Parametros OAuth inválidos:', { response_type, client_id });
     return res.status(400).json({ error: 'Parâmetros OAuth inválidos' });
   }
 
   // ✅ Se não tem email/senha, redireciona para página de login
   if (!email || !password) {
+    console.log('📝 Sem credenciais - redirecionando para login');
     const loginUrl = `/login?${new URLSearchParams({
       response_type,
       client_id,
       state,
       redirect_uri
     })}`;
+    console.log('Login URL:', loginUrl);
     return res.redirect(loginUrl);
   }
+
+  console.log('🔍 Validando credenciais para email:', email);
 
   // Valida credenciais no banco
   try {
@@ -360,7 +368,13 @@ app.get('/auth', async (req, res) => {
       where: { email }
     });
 
+    console.log('🔍 Resultado da busca do usuário:', user ? 'ENCONTRADO' : 'NÃO_ENCONTRADO');
+    if (user) {
+      console.log('👤 Usuário:', { id: user.id, name: user.name, email: user.email });
+    }
+
     if (!user || user.password !== password) {
+      console.log('❌ Credenciais inválidas');
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
@@ -368,23 +382,32 @@ app.get('/auth', async (req, res) => {
     const code = `code_${Date.now()}_${Math.random().toString(36).substring(2)}`;
     authCodes.set(code, {
       userId: user.id,
-      expires: Date.now() + 5 * 60 * 1000 // 5 minutos
+      expires: Date.now() + 30 * 60 * 1000 // 30 minutos para debug
     });
+
+    console.log('🎫 Código de autorização gerado:', code);
+    console.log('📊 Total de códigos em storage:', authCodes.size);
 
     // Redireciona de volta para Alexa
     const redirectUrl = new URL(redirect_uri);
     redirectUrl.searchParams.append('code', code);
     redirectUrl.searchParams.append('state', state);
+    
+    console.log('🔄 Redirecionando para:', redirectUrl.toString());
     res.redirect(redirectUrl.toString());
     
   } catch (error) {
-    console.error('Erro no /auth:', error);
+    console.error('💥 Erro no /auth:', error);
     res.status(500).json({ error: 'Falha ao autenticar' });
   }
 });
 
 // Endpoint para trocar code por access_token
 app.post('/token', async (req, res) => {
+  console.log('=== DEBUG TOKEN ===');
+  console.log('Body recebido:', JSON.stringify(req.body, null, 2));
+  console.log('📊 Códigos em storage:', authCodes.size);
+  
   const { grant_type, code, client_id, client_secret } = req.body;
 
   // Valida parâmetros
@@ -393,20 +416,36 @@ app.post('/token', async (req, res) => {
     client_id !== CLIENT_ID ||
     client_secret !== CLIENT_SECRET
   ) {
+    console.log('❌ Credenciais inválidas:', { grant_type, client_id, client_secret: client_secret ? 'PRESENTE' : 'AUSENTE' });
     return res.status(401).json({ error: 'Credenciais inválidas' });
   }
 
+  console.log('🔍 Procurando código:', code);
+
   // Verifica o código de autorização
   const authData = authCodes.get(code);
-  if (!authData || authData.expires < Date.now()) {
+  if (!authData) {
+    console.log('❌ Código não encontrado no storage');
+    console.log('📋 Códigos disponíveis:', Array.from(authCodes.keys()));
     return res.status(400).json({ error: 'Código inválido ou expirado' });
   }
 
-  // Gera um access_token (para testes, codificamos o userId em base64)
+  if (authData.expires < Date.now()) {
+    console.log('❌ Código expirado');
+    authCodes.delete(code);
+    return res.status(400).json({ error: 'Código inválido ou expirado' });
+  }
+
+  console.log('✅ Código válido encontrado para userId:', authData.userId);
+
+  // Gera um access_token
   const accessToken = Buffer.from(JSON.stringify({ userId: authData.userId })).toString('base64');
 
   // Remove o código após uso
   authCodes.delete(code);
+
+  console.log('🎫 Access token gerado:', accessToken.substring(0, 20) + '...');
+  console.log('🗑️ Código removido do storage');
 
   res.status(200).json({
     access_token: accessToken,
@@ -414,7 +453,6 @@ app.post('/token', async (req, res) => {
     expires_in: 3600 // 1 hora
   });
 });
-
 // Endpoint para validar access_token (usado pela skill)
 app.post('/validate-token', async (req, res) => {
   const { token } = req.body;
