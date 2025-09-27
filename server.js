@@ -321,10 +321,9 @@ app.post('/historySearch', async (req, res) => {
   }
 });
 
-// Consulta histórico por userId e reminderId
-app.get('/historyByReminder', async (req, res) => {
+app.post('/historyByReminder', async (req, res) => {
   try {
-    const { userId, reminderId } = req.query;
+    const { userId, reminderId } = req.body;
 
     // Validação básica dos parâmetros
     if (!userId || !reminderId) {
