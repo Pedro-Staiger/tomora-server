@@ -1,0 +1,176 @@
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tomora - Login para Alexa</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo h1 {
+            color: #667eea;
+            font-size: 36px;
+            font-weight: bold;
+        }
+        .logo p {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+        }
+        .btn-login:active {
+            transform: translateY(0);
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .info {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>💊 Tomora</h1>
+            <p>Gerenciador de Medicamentos</p>
+        </div>
+        
+        <div id="error" class="error"></div>
+        
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="email">E-mail</label>
+                <input type="email" id="email" name="email" required 
+                       placeholder="seu@email.com">
+            </div>
+            
+            <div class="input-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" name="password" required 
+                       placeholder="Digite sua senha">
+            </div>
+            
+            <button type="submit" class="btn-login">
+                Conectar com Alexa
+            </button>
+        </form>
+        
+        <div class="info">
+            Vinculando sua conta para usar a Skill Alexa Tomora
+        </div>
+    </div>
+
+    <script>
+        // Extrai parâmetros da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const state = urlParams.get('state');
+        const clientId = urlParams.get('client_id');
+        const redirectUri = urlParams.get('redirect_uri');
+        const responseType = urlParams.get('response_type');
+
+        console.log('OAuth params:', { state, clientId, redirectUri, responseType });
+
+        if (!state || !clientId || !redirectUri) {
+            document.getElementById('error').textContent = 
+                'Parâmetros OAuth inválidos. Tente novamente pelo app Alexa.';
+            document.getElementById('error').style.display = 'block';
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error');
+            
+            errorDiv.style.display = 'none';
+
+            try {
+                // Monta URL de autenticação
+                const authUrl = `/auth?` + new URLSearchParams({
+                    email,
+                    password,
+                    response_type: responseType,
+                    client_id: clientId,
+                    state: state,
+                    redirect_uri: redirectUri
+                });
+
+                console.log('Redirecting to:', authUrl);
+                
+                // Redireciona para o endpoint de autenticação
+                window.location.href = authUrl;
+                
+            } catch (error) {
+                errorDiv.textContent = 'Erro ao conectar. Tente novamente.';
+                errorDiv.style.display = 'block';
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
