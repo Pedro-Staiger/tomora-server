@@ -321,34 +321,6 @@ app.post('/historySearch', async (req, res) => {
   }
 });
 
-app.post('/historyByReminder', async (req, res) => {
-  try {
-    const { userId, reminderId } = req.body;
-
-    // Validação básica dos parâmetros
-    if (!userId || !reminderId) {
-      return res.status(400).json({ error: 'userId e reminderId são obrigatórios' });
-    }
-
-    // Consulta no banco (usando Prisma)
-    const histories = await prisma.history.findMany({
-      where: {
-        userId: userId,
-        reminderId: reminderId,
-      },
-      orderBy: {
-        id: 'desc', // Ordena por ID descendente para pegar o mais recente primeiro
-      },
-    });
-
-    // Retorna os registros encontrados
-    res.status(200).json(histories);
-  } catch (error) {
-    console.error('Erro ao consultar histórico por reminder:', error);
-    res.status(500).json({ error: 'Falha ao consultar histórico' });
-  }
-});
-
 //==ACCOUNT LINKING PARA ALEXA==\\
 // Configurações para testes
 const CLIENT_ID = 'tomora-skill-test-1234567890';
@@ -437,15 +409,14 @@ app.post('/token', async (req, res) => {
   console.log('Body recebido:', JSON.stringify(req.body, null, 2));
   console.log('📊 Códigos em storage:', authCodes.size);
   
-  const { grant_type, code, client_id, client_secret } = req.body;
+  const { grant_type, code, client_id } = req.body; // ✅ REMOVIDO client_secret
 
-  // Valida parâmetros
+  // ✅ Valida parâmetros (SEM exigir client_secret)
   if (
     grant_type !== 'authorization_code' ||
-    client_id !== CLIENT_ID ||
-    client_secret !== CLIENT_SECRET
+    client_id !== CLIENT_ID
   ) {
-    console.log('❌ Credenciais inválidas:', { grant_type, client_id, client_secret: client_secret ? 'PRESENTE' : 'AUSENTE' });
+    console.log('❌ Credenciais inválidas:', { grant_type, client_id });
     return res.status(401).json({ error: 'Credenciais inválidas' });
   }
 
