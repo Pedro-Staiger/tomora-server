@@ -117,6 +117,38 @@ app.post('/usersLink', async (req, res) => {
   }
 });
 
+//Deslinka usuários
+app.post('/usersDeslink', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { linkedId: null },
+    });
+
+    res.status(200).json(updatedUser);
+  } catch (error) {
+    console.error("Erro ao deslinkar conta: " + error);
+    res.status(500).json({ error: 'Falha ao deslinkar contas'});
+  }
+});
+
+//Deleta usuários
+app.post('usersDelete', async (req, res) => {
+  try {
+    await prisma.user.delete({
+      where: {
+        id: req.body.id
+      }
+    });
+
+    res.status(200).json({ message: "Usuário excluído com sucesso." });
+  } catch (error) {
+    res.status(500).json({ error: "Erro ao excluir usuário." });
+  }
+});
+
 //==LEMBRETES==\\
 //Cria lembrete
 app.post('/remindersCreate', async (req, res) => {
